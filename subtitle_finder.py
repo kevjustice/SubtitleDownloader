@@ -206,10 +206,10 @@ class SubtitleFinder:
                 return False
                 
             download_url = f"{self.base_url}{download_form['action']}"
-                response = self.session.get(download_url)
-                
-                # Save subtitle file
-                filename = f"{media_info['title']}"
+            response = self.session.get(download_url)
+            
+            # Save subtitle file
+            filename = f"{media_info['title']}"
                 if media_info['type'] == 'tv':
                     filename += f"_S{media_info['season']}E{media_info['episode']}"
                 else:

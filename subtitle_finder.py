@@ -23,13 +23,17 @@ class SubtitleFinder:
         # Extract year if present (look for years in filename before cleaning)
         year_match = re.search(r'\b(19|20)\d{2}\b', filename)  # Find 4-digit years
         year = year_match.group(0) if year_match else None  # Get actual matched text
-        #if year:
-        #    print(f"✓ Found Year: {year}")
+        if year:
+            clean_name = re.sub(r'\b(19|20)\d{2}\b', '', clean_name)  # Remove year from name
+        
         
         # Extract season/episode (for TV shows) - handles S01E01, S1E2, etc formats
         episode_match = re.search(r'(?:^|\b)[Ss](\d{1,3})[Ee](\d{1,3})\b', filename)
-        #if episode_match:
-        #    print(f"✓ Found Episode: {episode_match.group}")
+        season, episode = episode_match.groups() if episode_match else (None, None)
+        
+        if episode:
+            clean_name = re.sub(r'(?:^|\b)[Ss](\d{1,3})[Ee](\d{1,3})\b', '', clean_name)
+        
         
         # Remove common unwanted patterns and artifacts (including year markers)
         clean_name = re.sub(
@@ -56,14 +60,12 @@ class SubtitleFinder:
             return {
                 'type': 'tv',
                 'title': clean_name.strip('. -'),
+                'title': f"{clean_name.strip('. -')} S{season}E{episode}" if episode else clean_name.strip('. -'),
                 'season': season,
                 'episode': episode
             }
         else:
             if year:
-                if year not in clean_name:
-                    # If year is not in the cleaned name, append it
-                    clean_name += f" {year}" if year else ""
                 return {
                     'type': 'movie',
                     'title': f"{clean_name.strip('. -')} {year}" if year else clean_name.strip('. -'),

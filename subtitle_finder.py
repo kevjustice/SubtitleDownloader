@@ -189,9 +189,6 @@ class SubtitleFinder:
             print(f"Found {len(subtitles)} English subtitle(s)")
             print(f"Best match: {subtitles[0]['title']} (Downloads: {subtitles[0]['downloads']})")
             return self.download_subtitle(subtitles[0]['url'], media_info)
-            else:
-                print("No subtitles found for this title")
-                return False
                 
         except Exception as e:
             print(f"Error searching for {media_info['title']}: {e}")

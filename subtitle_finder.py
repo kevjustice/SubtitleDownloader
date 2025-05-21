@@ -217,13 +217,11 @@ class SubtitleFinder:
                     filename += f"_{media_info['year']}"
             filename += ".english.srt"
                 
-                with open(filename, 'wb') as f:
-                    f.write(response.content)
-                print(f"✓ Successfully downloaded subtitle: {filename}")
-                return True
-            else:
-                print("× No English subtitle download link found")
-                return False
+            with open(filename, 'wb') as f:
+                f.write(response.content)
+            print(f"✓ Successfully downloaded subtitle: {filename}")
+            return True
+            
                 
         except Exception as e:
             print(f"× Error downloading subtitle: {e}")

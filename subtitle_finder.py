@@ -98,7 +98,7 @@ class SubtitleFinder:
                     sub_found = False
                     file_path = os.path.join(root, file)
                     
-                    print(f"\nFound video file: {file_path}")
+                    print(f"\nFound video file: {file_path}", flush=True)
                     
                     # Check for existing subtitles
                     for sub_file in files:
@@ -107,18 +107,18 @@ class SubtitleFinder:
                              sub_file.endswith('.english.srt'))):
                             sub_found = True
                             has_subtitles += 1
-                            print(f"✓ Subtitle already exists: {sub_file}")
+                            print(f"✓ Subtitle already exists: {sub_file}", flush=True)
                             break
                     
                     if not sub_found:
-                        print("× No matching subtitle found - searching...")
+                        print("× No matching subtitle found - searching...", flush=True)
                         cleaned = self.clean_filename(file)
                         # Print cleaned results and search
-                        print(f"  Cleaned title: {cleaned['title']}")
+                        print(f"  Cleaned title: {cleaned['title']}", flush=True)
                         if cleaned.get('year'):
-                            print(f"  Detected year: {cleaned['year']}")
+                            print(f"  Detected year: {cleaned['year']}", flush=True)
                         if cleaned['type'] == 'tv':
-                            print(f"  Season: {cleaned['season']}, Episode: {cleaned['episode']}")
+                            print(f"  Season: {cleaned['season']}, Episode: {cleaned['episode']}", flush=True)
                         
                         if self.search_subtitles(cleaned):
                             downloaded += 1
@@ -148,9 +148,9 @@ class SubtitleFinder:
         query = re.sub(r'-+', '-', query)  # Remove duplicate dashes
         query = quote(query)
         search_url = f"{self.base_url}/search/{query}"
-        print(f"Searching URL: {search_url}")
+        print(f"Searching URL: {search_url}", flush=True)
         
-        print(f"Searching subtitles for: {media_info['title']}")
+        print(f"Searching subtitles for: {media_info['title']}", flush=True)
         
         try:
             response = self.session.get(search_url)
@@ -194,7 +194,7 @@ class SubtitleFinder:
                 })
 
             if not subtitles:
-                print("No English subtitles found")
+                print("No English subtitles found", flush=True)
                 return False
 
             # Sort by best match (download count + release type match)
@@ -204,8 +204,8 @@ class SubtitleFinder:
                 x['release'].lower() in media_info.get('title', '').lower()
             ), reverse=True)
 
-            print(f"Found {len(subtitles)} English subtitle(s)")
-            print(f"Best match: {subtitles[0]['title']} (Downloads: {subtitles[0]['downloads']})")
+            print(f"Found {len(subtitles)} English subtitle(s)", flush=True)
+            print(f"Best match: {subtitles[0]['title']} (Downloads: {subtitles[0]['downloads']})", flush=True)
             return self.download_subtitle(subtitles[0]['url'], media_info)
                 
         except Exception as e:
@@ -237,7 +237,7 @@ class SubtitleFinder:
                 
             with open(filename, 'wb') as f:
                 f.write(response.content)
-            print(f"✓ Successfully downloaded subtitle: {filename}")
+            print(f"✓ Successfully downloaded subtitle: {filename}", flush=True)
             return True
             
                 

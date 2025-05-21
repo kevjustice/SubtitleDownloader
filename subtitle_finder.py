@@ -20,25 +20,28 @@ class SubtitleFinder:
         # Remove file extension
         clean_name = os.path.splitext(filename)[0]
         
-        # Common patterns to remove
-        patterns = [
-            r'\.\d{3,4}p',  # Resolution
-            r'\.WEBRip', r'\.BluRay', r'\.x264', r'\.x265',  # Quality
-            r'\.\w{2,3}\-?\w{2,3}',  # Audio/video codecs
-            r'\[.*?\]', r'\(.*?\)',  # Bracketed text
-            r'\.\d{4}\.',  # Year in middle
-            r'\.S\d{2}E\d{2}',  # TV episode format
-        ]
+        # Remove common unwanted patterns and artifacts
+        clean_name = re.sub(
+            r'(?:\.|\(|\[|\-)?(?:\d{3,4}p|WEBRip|BluRay|WEB-DL|HDRip|DVDRip|'
+            r'x264|x265|HEVC|AAC5\.1|DTS-HD|Atmos|DDP5|Remux|'
+            r'(?:PPV\.)?[HP]DTV|(?:HD)?CAM|B[LR]\.Rip|WEB|h264|YTS|'
+            r'\d{1,2}\.\d{1,2}|\d{1,2}bit)(?:\.|\)|\]|\-)?',
+            '', clean_name, flags=re.IGNORECASE
+        )
         
-        for pattern in patterns:
-            clean_name = re.sub(pattern, '', clean_name, flags=re.IGNORECASE)
+        # Remove all content between brackets/parentheses including the brackets
+        clean_name = re.sub(r'[\[\(].*?[\]\)]', '', clean_name)
         
-        # Extract year if present (for movies)
-        year_match = re.search(r'\.(\d{4})\.?$', clean_name)
+        # Remove special characters and multiple dots
+        clean_name = re.sub(r'[^\w\s.-]', '', clean_name)
+        clean_name = re.sub(r'\.{2,}', '.', clean_name).strip('. -')
+        
+        # Extract year if present (for movies) - looks for 4 digits between 1900-2099
+        year_match = re.search(r'(?:^|\b)((?:19|20)\d{2})(?:$|\b)', clean_name)
         year = year_match.group(1) if year_match else None
         
-        # Extract season/episode (for TV shows)
-        episode_match = re.search(r'S(\d{2})E(\d{2})', filename, re.IGNORECASE)
+        # Extract season/episode (for TV shows) - handles S01E01, S1E2, etc formats
+        episode_match = re.search(r'(?:^|\b)[Ss](\d{1,3})[Ee](\d{1,3})\b', filename)
         
         if episode_match:
             season, episode = episode_match.groups()

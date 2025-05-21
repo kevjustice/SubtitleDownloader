@@ -151,13 +151,44 @@ class SubtitleFinder:
             response = self.session.get(search_url)
             soup = BeautifulSoup(response.text, 'html.parser')
             
-            # Find subtitle results
-            results = soup.find_all('a', href=re.compile(r'/subtitle/'))
-            if results:
-                print(f"Found {len(results)} potential subtitle(s)")
-                best_match = results[0]  # First result is usually best
-                subtitle_url = f"{self.base_url}{best_match['href']}"
-                return self.download_subtitle(subtitle_url, media_info)
+            # Find subtitle results in the list
+            subtitle_divs = soup.find_all('div', class_='subtitle')
+            if not subtitle_divs:
+                print("No subtitles found for this title")
+                return False
+
+            subtitles = []
+            for div in subtitle_divs:
+                # Extract subtitle details
+                title = div.find('h3').get_text(strip=True)
+                language = div.find('img', alt='English')
+                if not language:
+                    continue  # Skip non-English subtitles
+                
+                release = div.find('span', class_='release').get_text(strip=True) if div.find('span', class_='release') else ''
+                downloads = div.find('div', class_='downloads').get_text(strip=True) if div.find('div', class_='downloads') else '0'
+                
+                subtitles.append({
+                    'title': title,
+                    'url': f"{self.base_url}{div.find('a')['href']}",
+                    'release': release,
+                    'downloads': int(''.join(filter(str.isdigit, downloads)))
+                })
+
+            if not subtitles:
+                print("No English subtitles found")
+                return False
+
+            # Sort by best match (download count + release type match)
+            media_type = media_info['type']
+            subtitles.sort(key=lambda x: (
+                -x['downloads'],
+                x['release'].lower() in media_info.get('title', '').lower()
+            ), reverse=True)
+
+            print(f"Found {len(subtitles)} English subtitle(s)")
+            print(f"Best match: {subtitles[0]['title']} (Downloads: {subtitles[0]['downloads']})")
+            return self.download_subtitle(subtitles[0]['url'], media_info)
             else:
                 print("No subtitles found for this title")
                 return False
@@ -172,10 +203,12 @@ class SubtitleFinder:
             response = self.session.get(subtitle_url)
             soup = BeautifulSoup(response.text, 'html.parser')
             
-            # Find English subtitle download link
-            download_link = soup.find('a', href=re.compile(r'/download/'))
-            if download_link:
-                download_url = f"{self.base_url}{download_link['href']}"
+            # Find download link in the download button
+            download_form = soup.find('form', {'action': lambda x: x and '/download/' in x})
+            if not download_form:
+                return False
+                
+            download_url = f"{self.base_url}{download_form['action']}"
                 response = self.session.get(download_url)
                 
                 # Save subtitle file

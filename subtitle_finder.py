@@ -21,8 +21,8 @@ class SubtitleFinder:
         clean_name = os.path.splitext(filename)[0]
         
         # Extract year if present (look for years in filename before cleaning)
-        year_match = re.search(r'\b(1[0-9]{3}|2[0-9]{3})\b', filename)
-        year = year_match.group if year_match else None
+        year_match = re.search(r'\b(19|20)\d{2}\b', filename)  # Find 4-digit years
+        year = year_match.group(0) if year_match else None  # Get actual matched text
         #if year:
         #    print(f"✓ Found Year: {year}")
         
@@ -66,7 +66,7 @@ class SubtitleFinder:
                     clean_name += f" {year}" if year else ""
                 return {
                     'type': 'movie',
-                    'title': clean_name.strip('. -'),
+                    'title': f"{clean_name.strip('. -')} {year}" if year else clean_name.strip('. -'),
                     'year': year
                 }
             else:

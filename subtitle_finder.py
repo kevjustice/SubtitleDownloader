@@ -210,12 +210,12 @@ class SubtitleFinder:
             
             # Save subtitle file
             filename = f"{media_info['title']}"
-                if media_info['type'] == 'tv':
-                    filename += f"_S{media_info['season']}E{media_info['episode']}"
-                else:
-                    if media_info.get('year'):
-                        filename += f"_{media_info['year']}"
-                filename += ".english.srt"
+            if media_info['type'] == 'tv':
+                filename += f"_S{media_info['season']}E{media_info['episode']}"
+            else:
+                if media_info.get('year'):
+                    filename += f"_{media_info['year']}"
+            filename += ".english.srt"
                 
                 with open(filename, 'wb') as f:
                     f.write(response.content)

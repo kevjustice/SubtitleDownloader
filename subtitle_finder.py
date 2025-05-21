@@ -137,16 +137,18 @@ class SubtitleFinder:
     def search_subtitles(self, media_info):
         """Search for subtitles on subdl.com"""
         # Build search query with appropriate metadata
-        if media_info['type'] == 'movie':
-            base_query = f"{media_info['title']} {media_info.get('year', '')}"
-        else:  # TV show
-            base_query = f"{media_info['title']} S{media_info['season']}E{media_info['episode']}"
+        #if media_info['type'] == 'movie':
+        #    base_query = f"{media_info['title']} {media_info.get('year', '')}"
+        #else:  # TV show
+        #    base_query = f"{media_info['title']} S{media_info['season']}E{media_info['episode']}"
+        base_query = media_info['title']
         
         # Clean and format the query for URL
-        query = base_query.strip().replace(' ', '-').lower()
+        query = base_query.strip().replace(' ', '%20').lower()
         query = re.sub(r'-+', '-', query)  # Remove duplicate dashes
         query = quote(query)
         search_url = f"{self.base_url}/search/{query}"
+        print(f"Searching URL: {search_url}")
         
         print(f"Searching subtitles for: {media_info['title']}")
         

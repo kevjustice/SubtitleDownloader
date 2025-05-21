@@ -20,12 +20,12 @@ class SubtitleFinder:
         # Remove file extension
         clean_name = os.path.splitext(filename)[0]
         
-        # Remove common unwanted patterns and artifacts
+        # Remove common unwanted patterns and artifacts (including year markers)
         clean_name = re.sub(
-            r'(?:\.|\(|\[|\-)?(?:\d{3,4}p|WEBRip|BluRay|WEB-DL|HDRip|DVDRip|'
-            r'x264|x265|HEVC|AAC5\.1|DTS-HD|Atmos|DDP5|Remux|'
-            r'(?:PPV\.)?[HP]DTV|(?:HD)?CAM|B[LR]\.Rip|WEB|h264|YTS|'
-            r'\d{1,2}\.\d{1,2}|\d{1,2}bit)(?:\.|\)|\]|\-)?',
+            r'(?:\.|\(|\[|\-)?(\d{3,4}p|WEBRip|BluRay|WEB-DL|WEBDL|HDRip|DVDRip|'
+            r'x264|x265|H265|H256|HEVC|AAC5\.1|DTS-HD|Atmos|DDP5|Remux|MeGusta|d3g|'
+            r'(?:PPV\.)?[HP]DTV|(?:HD)?CAM|B[LR]\.Rip|WEB|h264|YTS|Copy|10Bit|'
+            r'\d{1,2}\.\d{1,2}|\d{1,2}bit|1080p|2160p)(?:\.|\)|\]|\-)?',
             '', clean_name, flags=re.IGNORECASE
         )
         
@@ -38,8 +38,8 @@ class SubtitleFinder:
         clean_name = re.sub(r'\s+', ' ', clean_name)       # Collapse multiple spaces
         clean_name = clean_name.strip()
         
-        # Extract year if present (for movies) - looks for 4 digits between 1900-2099
-        year_match = re.search(r'(?:^|\b)((?:19|20)\d{2})(?:$|\b)', clean_name)
+        # Extract year if present (look for years in filename before cleaning)
+        year_match = re.search(r'\b(19|20)\d{2}\b', filename)  # Search original filename
         year = year_match.group(1) if year_match else None
         
         # Extract season/episode (for TV shows) - handles S01E01, S1E2, etc formats
@@ -95,10 +95,14 @@ class SubtitleFinder:
                     if not sub_found:
                         print("× No matching subtitle found - searching...")
                         cleaned = self.clean_filename(file)
-                        if self.search_subtitles(cleaned):
-                            downloaded += 1
-                        else:
-                            failed += 1
+                        # Print cleaned results without searching
+                        print(f"  Cleaned title: {cleaned['title']}")
+                        if cleaned.get('year'):
+                            print(f"  Detected year: {cleaned['year']}")
+                        if cleaned['type'] == 'tv':
+                            print(f"  Season: {cleaned['season']}, Episode: {cleaned['episode']}")
+                        print("  Skipping search (demo mode)\n")
+                        failed += 1
         
         # Print summary
         print("\n" + "="*50)

@@ -156,46 +156,23 @@ class SubtitleFinder:
             response = self.session.get(search_url)
             soup = BeautifulSoup(response.text, 'html.parser')
             
-            # Find subtitle list container
-            subtitle_list = soup.find('div', class_='subtitle-list')
-            if not subtitle_list:
-                print("No subtitles found for this title")
+            # Find best media match from search results
+            media_matches = soup.find_all('div', class_='row justify-content-between')
+            if not media_matches:
+                print("No media matches found", flush=True)
                 return False
 
-            subtitles = []
-            # Find each subtitle entry
-            for row in subtitle_list.find_all('div', class_='row justify-content-between'):
-                # Extract main title info
-                title_div = row.find('div', class_='col-auto')
-                if not title_div:
-                    continue
-                    
-                title_link = title_div.find('h3').find('a')
-                title = title_link.get_text(strip=True)
-                subtitle_url = f"{self.base_url}{title_link['href']}"
-                
-                # Check for English language
-                if not row.find('img', alt='English'):
-                    continue
-                
-                # Extract release info
-                release_span = row.find('div', class_='text-truncate').find('span', class_='release')
-                release = release_span.get_text(strip=True) if release_span else ''
-                
-                # Extract subtitle count
-                count_text = row.find('div', class_='col-auto').get_text(strip=True)
-                subtitle_count = int(re.search(r'\d+', count_text).group()) if re.search(r'\d+', count_text) else 0
-                
-                subtitles.append({
-                    'title': title,
-                    'url': subtitle_url,
-                    'release': release,
-                    'downloads': subtitle_count
-                })
-
-            if not subtitles:
-                print("No English subtitles found", flush=True)
-                return False
+            # Get first media result details
+            first_match = media_matches[0]
+            title_link = first_match.find('h3').find('a')
+            media_title = title_link.get_text(strip=True)
+            media_url = f"{self.base_url}{title_link['href']}"
+            
+            print(f"Found media page: {media_title}", flush=True)
+            print(f"Fetching subtitle list from: {media_url}", flush=True)
+            
+            # Now get subtitles list from the media-specific page
+            return self.get_subtitle_list(media_url, media_info)
 
             # Sort by best match (download count + release type match)
             media_type = media_info['type']
@@ -210,6 +187,60 @@ class SubtitleFinder:
                 
         except Exception as e:
             print(f"Error searching for {media_info['title']}: {e}")
+            return False
+
+    def get_subtitle_list(self, media_url, media_info):
+        """Get subtitles list from a specific media page"""
+        try:
+            response = self.session.get(media_url)
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            subtitles = []
+            # Find each subtitle entry
+            for row in soup.find_all('div', class_='row justify-content-between'):
+                # Extract subtitle details
+                title_div = row.find('div', class_='col-auto')
+                if not title_div:
+                    continue
+                    
+                title = title_div.find('h3').get_text(strip=True)
+                subtitle_url = f"{self.base_url}{title_div.find('a')['href']}"
+                
+                # Check for English language
+                if not row.find('img', alt='English'):
+                    continue
+                
+                # Extract release info
+                release_span = row.find('div', class_='text-truncate').find('span', class_='release')
+                release = release_span.get_text(strip=True) if release_span else ''
+                
+                # Extract downloads count
+                count_text = row.find('div', class_='col-auto').get_text(strip=True)
+                downloads = int(re.search(r'\d+', count_text).group()) if re.search(r'\d+', count_text) else 0
+                
+                subtitles.append({
+                    'title': title,
+                    'url': subtitle_url,
+                    'release': release,
+                    'downloads': downloads
+                })
+
+            if not subtitles:
+                print("No English subtitles found for this media", flush=True)
+                return False
+
+            # Sort by best match (download count + release type match)
+            subtitles.sort(key=lambda x: (
+                -x['downloads'],
+                x['release'].lower() in media_info.get('title', '').lower()
+            ), reverse=True)
+
+            print(f"Found {len(subtitles)} English subtitle(s)", flush=True)
+            print(f"Best match: {subtitles[0]['title']} (Downloads: {subtitles[0]['downloads']})", flush=True)
+            return self.download_subtitle(subtitles[0]['url'], media_info)
+            
+        except Exception as e:
+            print(f"Error getting subtitle list: {e}")
             return False
 
     def download_subtitle(self, subtitle_url, media_info):

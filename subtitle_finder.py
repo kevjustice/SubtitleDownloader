@@ -32,9 +32,11 @@ class SubtitleFinder:
         # Remove all content between brackets/parentheses including the brackets
         clean_name = re.sub(r'[\[\(].*?[\]\)]', '', clean_name)
         
-        # Remove special characters and multiple dots
-        clean_name = re.sub(r'[^\w\s.-]', '', clean_name)
-        clean_name = re.sub(r'\.{2,}', '.', clean_name).strip('. -')
+        # Replace remaining special characters and normalize spaces
+        clean_name = re.sub(r'[^\w\s]', ' ', clean_name)  # Replace non-alphanum with space
+        clean_name = re.sub(r'[\-.]+', ' ', clean_name)    # Replace dashes/dots with space
+        clean_name = re.sub(r'\s+', ' ', clean_name)       # Collapse multiple spaces
+        clean_name = clean_name.strip()
         
         # Extract year if present (for movies) - looks for 4 digits between 1900-2099
         year_match = re.search(r'(?:^|\b)((?:19|20)\d{2})(?:$|\b)', clean_name)
@@ -109,7 +111,16 @@ class SubtitleFinder:
 
     def search_subtitles(self, media_info):
         """Search for subtitles on subdl.com"""
-        query = quote(media_info['title'].replace(' ', '-').lower())
+        # Build search query with appropriate metadata
+        if media_info['type'] == 'movie':
+            base_query = f"{media_info['title']} {media_info.get('year', '')}"
+        else:  # TV show
+            base_query = f"{media_info['title']} S{media_info['season']}E{media_info['episode']}"
+        
+        # Clean and format the query for URL
+        query = base_query.strip().replace(' ', '-').lower()
+        query = re.sub(r'-+', '-', query)  # Remove duplicate dashes
+        query = quote(query)
         search_url = f"{self.base_url}/search/{query}"
         
         print(f"Searching subtitles for: {media_info['title']}")

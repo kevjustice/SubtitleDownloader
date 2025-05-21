@@ -60,11 +60,22 @@ class SubtitleFinder:
         media_path = self.config.get('Settings', 'media_path')
         video_extensions = ('.mp4', '.mkv', '.avi', '.mov')
         
+        total_files = 0
+        has_subtitles = 0
+        downloaded = 0
+        failed = 0
+        
+        print(f"\nScanning media folder: {media_path}")
+        
         for root, _, files in os.walk(media_path):
             for file in files:
                 if file.lower().endswith(video_extensions):
+                    total_files += 1
                     base_name = os.path.splitext(file)[0]
                     sub_found = False
+                    file_path = os.path.join(root, file)
+                    
+                    print(f"\nFound video file: {file_path}")
                     
                     # Check for existing subtitles
                     for sub_file in files:
@@ -72,16 +83,33 @@ class SubtitleFinder:
                             (sub_file.endswith('.srt') or 
                              sub_file.endswith('.english.srt'))):
                             sub_found = True
+                            has_subtitles += 1
+                            print(f"✓ Subtitle already exists: {sub_file}")
                             break
                     
                     if not sub_found:
+                        print("× No matching subtitle found - searching...")
                         cleaned = self.clean_filename(file)
-                        self.search_subtitles(cleaned)
+                        if self.search_subtitles(cleaned):
+                            downloaded += 1
+                        else:
+                            failed += 1
+        
+        # Print summary
+        print("\n" + "="*50)
+        print("Subtitle Search Summary:")
+        print(f"Total video files found: {total_files}")
+        print(f"Files with existing subtitles: {has_subtitles}")
+        print(f"Subtitles downloaded: {downloaded}")
+        print(f"Files still missing subtitles: {failed}")
+        print("="*50 + "\n")
 
     def search_subtitles(self, media_info):
         """Search for subtitles on subdl.com"""
         query = quote(media_info['title'].replace(' ', '-').lower())
         search_url = f"{self.base_url}/search/{query}"
+        
+        print(f"Searching subtitles for: {media_info['title']}")
         
         try:
             response = self.session.get(search_url)
@@ -90,12 +118,17 @@ class SubtitleFinder:
             # Find subtitle results
             results = soup.find_all('a', href=re.compile(r'/subtitle/'))
             if results:
+                print(f"Found {len(results)} potential subtitle(s)")
                 best_match = results[0]  # First result is usually best
                 subtitle_url = f"{self.base_url}{best_match['href']}"
-                self.download_subtitle(subtitle_url, media_info)
+                return self.download_subtitle(subtitle_url, media_info)
+            else:
+                print("No subtitles found for this title")
+                return False
                 
         except Exception as e:
             print(f"Error searching for {media_info['title']}: {e}")
+            return False
 
     def download_subtitle(self, subtitle_url, media_info):
         """Download the subtitle file"""
@@ -120,10 +153,15 @@ class SubtitleFinder:
                 
                 with open(filename, 'wb') as f:
                     f.write(response.content)
-                print(f"Downloaded subtitle: {filename}")
+                print(f"✓ Successfully downloaded subtitle: {filename}")
+                return True
+            else:
+                print("× No English subtitle download link found")
+                return False
                 
         except Exception as e:
-            print(f"Error downloading subtitle: {e}")
+            print(f"× Error downloading subtitle: {e}")
+            return False
 
 if __name__ == "__main__":
     finder = SubtitleFinder()

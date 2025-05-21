@@ -20,11 +20,23 @@ class SubtitleFinder:
         # Remove file extension
         clean_name = os.path.splitext(filename)[0]
         
+        # Extract year if present (look for years in filename before cleaning)
+        year_match = re.search(r'\b(1[0-9]{3}|2[0-9]{3})\b', filename)
+        year = year_match.group if year_match else None
+        #if year:
+        #    print(f"✓ Found Year: {year}")
+        
+        # Extract season/episode (for TV shows) - handles S01E01, S1E2, etc formats
+        episode_match = re.search(r'(?:^|\b)[Ss](\d{1,3})[Ee](\d{1,3})\b', filename)
+        #if episode_match:
+        #    print(f"✓ Found Episode: {episode_match.group}")
+        
         # Remove common unwanted patterns and artifacts (including year markers)
         clean_name = re.sub(
             r'(?:\.|\(|\[|\-)?(\d{3,4}p|WEBRip|BluRay|WEB-DL|WEBDL|HDRip|DVDRip|'
             r'x264|x265|H265|H256|HEVC|AAC5\.1|DTS-HD|Atmos|DDP5|Remux|MeGusta|d3g|'
-            r'(?:PPV\.)?[HP]DTV|(?:HD)?CAM|B[LR]\.Rip|WEB|h264|YTS|Copy|10Bit|'
+            r'(?:PPV\.)?[HP]DTV|(?:HD)?CAM|B[LR]\.Rip|WEB|h264|YTS|Copy|10Bit|mkv|avi|mp4|m4v|'
+            r'AC3|DTS|DD5\.1|AC3\.5\.1|AC3\.2\.0|AAC|DTS-HD|TrueHD|BluRay\.Rip|'
             r'\d{1,2}\.\d{1,2}|\d{1,2}bit|1080p|2160p)(?:\.|\)|\]|\-)?',
             '', clean_name, flags=re.IGNORECASE
         )
@@ -38,13 +50,7 @@ class SubtitleFinder:
         clean_name = re.sub(r'\s+', ' ', clean_name)       # Collapse multiple spaces
         clean_name = clean_name.strip()
         
-        # Extract year if present (look for years in filename before cleaning)
-        year_match = re.search(r'\b(19|20)\d{2}\b', filename)  # Search original filename
-        year = year_match.group(1) if year_match else None
-        
-        # Extract season/episode (for TV shows) - handles S01E01, S1E2, etc formats
-        episode_match = re.search(r'(?:^|\b)[Ss](\d{1,3})[Ee](\d{1,3})\b', filename)
-        
+
         if episode_match:
             season, episode = episode_match.groups()
             return {
@@ -54,11 +60,21 @@ class SubtitleFinder:
                 'episode': episode
             }
         else:
-            return {
-                'type': 'movie',
-                'title': clean_name.strip('. -'),
-                'year': year
-            }
+            if year:
+                if year not in clean_name:
+                    # If year is not in the cleaned name, append it
+                    clean_name += f" {year}" if year else ""
+                return {
+                    'type': 'movie',
+                    'title': clean_name.strip('. -'),
+                    'year': year
+                }
+            else:
+                return {
+                    'type': 'unknown',
+                    'title': clean_name.strip('. -')
+                }
+            
 
     def find_missing_subtitles(self):
         """Find video files missing subtitles"""

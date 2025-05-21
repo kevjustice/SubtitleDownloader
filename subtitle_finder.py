@@ -174,16 +174,7 @@ class SubtitleFinder:
             # Now get subtitles list from the media-specific page
             return self.get_subtitle_list(media_url, media_info)
 
-            # Sort by best match (download count + release type match)
-            media_type = media_info['type']
-            subtitles.sort(key=lambda x: (
-                -x['downloads'],
-                x['release'].lower() in media_info.get('title', '').lower()
-            ), reverse=True)
-
-            print(f"Found {len(subtitles)} English subtitle(s)", flush=True)
-            print(f"Best match: {subtitles[0]['title']} (Downloads: {subtitles[0]['downloads']})", flush=True)
-            return self.download_subtitle(subtitles[0]['url'], media_info)
+            # The subtitle list handling was moved to get_subtitle_list()
                 
         except Exception as e:
             print(f"Error searching for {media_info['title']}: {e}")

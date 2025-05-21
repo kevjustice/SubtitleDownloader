@@ -156,28 +156,41 @@ class SubtitleFinder:
             response = self.session.get(search_url)
             soup = BeautifulSoup(response.text, 'html.parser')
             
-            # Find subtitle results in the list
-            subtitle_divs = soup.find_all('div', class_='subtitle')
-            if not subtitle_divs:
+            # Find subtitle list container
+            subtitle_list = soup.find('div', class_='subtitle-list')
+            if not subtitle_list:
                 print("No subtitles found for this title")
                 return False
 
             subtitles = []
-            for div in subtitle_divs:
-                # Extract subtitle details
-                title = div.find('h3').get_text(strip=True)
-                language = div.find('img', alt='English')
-                if not language:
-                    continue  # Skip non-English subtitles
+            # Find each subtitle entry
+            for row in subtitle_list.find_all('div', class_='row justify-content-between'):
+                # Extract main title info
+                title_div = row.find('div', class_='col-auto')
+                if not title_div:
+                    continue
+                    
+                title_link = title_div.find('h3').find('a')
+                title = title_link.get_text(strip=True)
+                subtitle_url = f"{self.base_url}{title_link['href']}"
                 
-                release = div.find('span', class_='release').get_text(strip=True) if div.find('span', class_='release') else ''
-                downloads = div.find('div', class_='downloads').get_text(strip=True) if div.find('div', class_='downloads') else '0'
+                # Check for English language
+                if not row.find('img', alt='English'):
+                    continue
+                
+                # Extract release info
+                release_span = row.find('div', class_='text-truncate').find('span', class_='release')
+                release = release_span.get_text(strip=True) if release_span else ''
+                
+                # Extract subtitle count
+                count_text = row.find('div', class_='col-auto').get_text(strip=True)
+                subtitle_count = int(re.search(r'\d+', count_text).group()) if re.search(r'\d+', count_text) else 0
                 
                 subtitles.append({
                     'title': title,
-                    'url': f"{self.base_url}{div.find('a')['href']}",
+                    'url': subtitle_url,
                     'release': release,
-                    'downloads': int(''.join(filter(str.isdigit, downloads)))
+                    'downloads': subtitle_count
                 })
 
             if not subtitles:

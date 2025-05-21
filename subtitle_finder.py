@@ -113,14 +113,17 @@ class SubtitleFinder:
                     if not sub_found:
                         print("× No matching subtitle found - searching...")
                         cleaned = self.clean_filename(file)
-                        # Print cleaned results without searching
+                        # Print cleaned results and search
                         print(f"  Cleaned title: {cleaned['title']}")
                         if cleaned.get('year'):
                             print(f"  Detected year: {cleaned['year']}")
                         if cleaned['type'] == 'tv':
                             print(f"  Season: {cleaned['season']}, Episode: {cleaned['episode']}")
-                        print("  Skipping search (demo mode)\n")
-                        failed += 1
+                        
+                        if self.search_subtitles(cleaned):
+                            downloaded += 1
+                        else:
+                            failed += 1
         
         # Print summary
         print("\n" + "="*50)

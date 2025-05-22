@@ -172,13 +172,9 @@ class SubtitleFinder:
         print(f"Files still missing subtitles: {failed}")
         print("="*50 + "\n")
 
-    def search_subtitles(self, media_info, root,file):
+    def search_subtitles(self, media_info, root, file, retry_count=0):
         """Search for subtitles on subdl.com"""
-        # Build search query with appropriate metadata
-        #if media_info['type'] == 'movie':
-        #    base_query = f"{media_info['title']} {media_info.get('year', '')}"
-        #else:  # TV show
-        #    base_query = f"{media_info['title']} S{media_info['season']}E{media_info['episode']}"
+        MAX_RETRIES = 4
         base_query = media_info['title']
         
         # Clean and format the query for URL
@@ -206,9 +202,18 @@ class SubtitleFinder:
                     
                     # Check for ad redirect
                     if "subdl.com/ads" in media_url:
-                        print("Detected ad redirect, retrying with different headers...", flush=True)
+                        if retry_count >= MAX_RETRIES:
+                            print("Max retries reached for ad redirect, skipping...", flush=True)
+                            return False
+                        
+                        import time
+                        import random
+                        delay = random.uniform(2, 5)  # Random delay between 2-5 seconds
+                        print(f"Detected ad redirect, waiting {delay:.1f} seconds before retry {retry_count + 1}/{MAX_RETRIES}...", flush=True)
+                        time.sleep(delay)
+                        
                         self.update_headers()  # Rotate to new user agent
-                        return self.search_subtitles(media_info, root, file)  # Retry search
+                        return self.search_subtitles(media_info, root, file, retry_count + 1)  # Retry search
                     
                     # Now get subtitles list from the media-specific page
                     return self.get_subtitle_link(media_url, media_info, root, file)    

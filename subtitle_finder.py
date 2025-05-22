@@ -452,3 +452,6 @@ class SubtitleFinder:
         except Exception as e:
             print(f"Error downloading TV subtitle: {e}")
             return False
+if __name__ == "__main__":
+    finder = SubtitleFinder()
+    finder.find_missing_subtitles()

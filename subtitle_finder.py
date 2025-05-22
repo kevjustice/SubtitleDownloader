@@ -293,28 +293,30 @@ class SubtitleFinder:
                 zip_contents = zip_ref.namelist()
                 srt_files = [f for f in zip_contents if f.lower().endswith('.srt')]
 
-                if len(srt_files) == 1:
-                    # Single SRT file - extract directly
+                # Find largest .srt file by size
+                largest_srt = None
+                max_size = 0
+                for file_info in zip_ref.infolist():
+                    if file_info.filename.lower().endswith('.srt'):
+                        if file_info.file_size > max_size:
+                            max_size = file_info.file_size
+                            largest_srt = file_info.filename
+                
+                if largest_srt:
+                    # Extract the largest .srt file
                     temp_extract_folder = tempfile.mkdtemp()
-                    zip_ref.extractall(temp_extract_folder)
+                    zip_ref.extract(largest_srt, temp_extract_folder)
                     
-                    original_file_path = os.path.join(temp_extract_folder, srt_files[0])
+                    original_file_path = os.path.join(temp_extract_folder, largest_srt)
                     base_name = os.path.splitext(file)[0] + ".english.srt"
                     new_file_path = os.path.join(output_folder, base_name)
                     shutil.move(original_file_path, new_file_path)
                     
                     print(f"Successfully downloaded subtitle: {new_file_path}")
+                    print(f"Selected largest .srt file: {largest_srt} ({max_size} bytes)")
                     shutil.rmtree(temp_extract_folder)
                 else:
-                    # Multiple files - extract to temp subfolder
-                    temp_subfolder = os.path.join(output_folder, "temp")
-                    os.makedirs(temp_subfolder, exist_ok=True)
-                    zip_ref.extractall(temp_subfolder)
-                    
-                    print(f"+ Extracted {len(zip_contents)} files to: {temp_subfolder}")
-                    print("Contents:")
-                    for f in zip_contents:
-                        print(f" - {f}")
+                    print("No .srt files found in the zip archive")
 
             return True
         

@@ -145,11 +145,11 @@ class SubtitleFinder:
                              sub_file.endswith('.english.srt'))):
                             sub_found = True
                             has_subtitles += 1
-                            print(f"+ Subtitle already exists: {sub_file}", flush=True)
+                            print(f"Subtitle already exists: {sub_file}", flush=True)
                             break
                     
                     if not sub_found:
-                        print("× No matching subtitle found - searching...", flush=True)
+                        print("No matching subtitle found - searching...", flush=True)
                         cleaned = self.clean_filename(file)
                         # Print cleaned results and search
                         print(f"  Cleaned title: {cleaned['title']}", flush=True)
@@ -296,7 +296,7 @@ class SubtitleFinder:
             response.raise_for_status()  # Raise error if download fails
             with open(zip_path, "wb") as f:
                 f.write(response.content)
-            print(f"✓ Saved subtitle zip: {zip_path}")
+            print(f"Saved subtitle zip: {zip_path}")
 
             # Extract the zip file
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
@@ -313,7 +313,7 @@ class SubtitleFinder:
                     new_file_path = os.path.join(output_folder, base_name)
                     shutil.move(original_file_path, new_file_path)
                     
-                    print(f"✓ Successfully downloaded subtitle: {new_file_path}")
+                    print(f"Successfully downloaded subtitle: {new_file_path}")
                     shutil.rmtree(temp_extract_folder)
                 else:
                     # Multiple files - extract to temp subfolder
@@ -329,7 +329,7 @@ class SubtitleFinder:
             return True
         
         except Exception as e:
-            print(f"x Error downloading subtitle: {e}")
+            print(f"Error downloading subtitle: {e}")
             return False
 
 

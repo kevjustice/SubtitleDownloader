@@ -286,8 +286,9 @@ class SubtitleFinder:
         # Ensure output folder exists
         os.makedirs(output_folder, exist_ok=True)
 
-        # Create a temporary zip file path
-        zip_path = os.path.join(tempfile.gettempdir(), "subtitle.zip")
+        # Create zip file path matching video filename
+        zip_name = os.path.splitext(file)[0] + ".subtitle.zip"
+        zip_path = os.path.join(output_folder, zip_name)
 
         try:
             # Download the zip file
@@ -296,6 +297,7 @@ class SubtitleFinder:
             response.raise_for_status()  # Raise error if download fails
             with open(zip_path, "wb") as f:
                 f.write(response.content)
+            print(f"✓ Saved subtitle zip: {zip_path}")
 
             # Extract the zip file
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
@@ -325,14 +327,10 @@ class SubtitleFinder:
                     for f in zip_contents:
                         print(f" - {f}")
 
-            # Clean up zip file
-            os.remove(zip_path)
             return True
         
         except Exception as e:
             print(f"× Error downloading subtitle: {e}")
-            if os.path.exists(zip_path):
-                os.remove(zip_path)
             return False
 
 

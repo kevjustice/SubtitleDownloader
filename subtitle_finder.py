@@ -456,11 +456,11 @@ class SubtitleFinder:
 
             # Result
             if episode_link:
-                print(f"Found episode-specific subtitle: {episode_link['href']}", flush=True)
-                return self.download_tv_subtitle(episode_link, media_info, root, file)
+                print(f"Found episode-specific subtitle: {episode_link}", flush=True)
+                return self.download_tv_subtitle({'href': episode_link}, media_info, root, file)
             elif season_link:
-                print(f"Found full season subtitle package: {season_link['href']}", flush=True)
-                return self.download_tv_subtitle(season_link, media_info, root, file)
+                print(f"Found full season subtitle package: {season_link}", flush=True)
+                return self.download_tv_subtitle({'href': season_link}, media_info, root, file)
             else:
                 print("No matching subtitles found for this episode", flush=True)
                 return False

@@ -92,7 +92,7 @@ class SubtitleFinder:
             if year:
                 return {
                     'type': 'movie',
-                    'title': f"{clean_name} {year}",
+                    'title': f"{clean_name}",
                     'year': year
                 }
             else:
@@ -417,31 +417,49 @@ class SubtitleFinder:
                 print("English section not found.")
                 return False
 
-            # Step 2: Collect all href links in that section
-            hrefs = []
+            # Step 2: Look for episode-specific links
+            # Create multiple search patterns for the episode
+            season = media_info['season'].zfill(2)  # Ensure 2 digits (e.g., "01" instead of "1")
+            episode = media_info['episode'].zfill(2)  # Ensure 2 digits
+
+            # Different episode format patterns to search for
+            search_patterns = [
+                f"S{season}E{episode}",       # S01E01
+                f"S{season}xE{episode}",      # S01xE01
+                f"S{season}x{episode}",       # S01x01
+                f"{season}x{episode}",        # 01x01
+                f"S{season}{episode}",        # S0101
+                f"Season {season} Episode {episode}",  # Season 01 Episode 01
+                f"Season{season}Episode{episode}",     # Season01Episode01
+                f"E{episode}",                # E01 (if we're already in the right season section)
+                f"Ep{episode}",               # Ep01
+                f"Ep {episode}",              # Ep 01
+                f"Episode {episode}",         # Episode 01
+                f"Episode{episode}"           # Episode01
+            ]
+
+            episode_link = None
+            season_link = None
+
+            # Look for links containing any of our episode patterns
             for a in english_section.find_all("a", href=True):
-                text = a.get_text()
-                href = a['href']
-                hrefs.append((text, href))
-
-            # Step 3: Apply your matching logic
-            download_link = None
-
-            # Initialize variables
-            episode_link = None
-            season_link = None
+                text = a.get_text().strip()
+                
+                # Check if any of our patterns match
+                if any(pattern.lower() in text.lower() for pattern in search_patterns):
+                    # Found a link with our episode number
+                    print(f"Found matching episode text: '{text}'")
+                    parent_li = a.find_parent('li')
+                    if parent_li:
+                        # Look for zip download link in this list item
+                        for download_a in parent_li.find_all('a', href=True):
+                            if download_a['href'].endswith('.zip'):
+                                episode_link = download_a['href']
+                                break
+                    if episode_link:
+                        break
             
-            # 1. Look for S02E07
-            episode_link = None
-            season_link = None
-            
-            for text, href in hrefs:
-                search_str = f"S{media_info['season']}E{media_info['episode']}"
-                if search_str in text and href.endswith('.zip'):
-                    episode_link = href
-                    break
-
-            # 2. If not found, look for Season variants
+            # If no episode-specific link, look for season links
             if not episode_link:
                 season_number = media_info['season']
                 season_number_no_pad = str(int(season_number))  # Converts "02" to "2"
@@ -455,18 +473,26 @@ class SubtitleFinder:
                     f"Season {season_number_no_pad}",
                     f"Season{season_number_no_pad}"
                 ]
-                for text, href in hrefs:
-                    if any(keyword in text for keyword in season_keywords) and href.endswith('.zip'):
-                        season_link = href
-                        break
+                
+                for a in english_section.find_all("a", href=True):
+                    text = a.get_text()
+                    if any(keyword in text for keyword in season_keywords):
+                        parent_li = a.find_parent('li')
+                        if parent_li:
+                            for download_a in parent_li.find_all('a', href=True):
+                                if download_a['href'].endswith('.zip'):
+                                    season_link = download_a['href']
+                                    break
+                        if season_link:
+                            break
 
             # Result
             if episode_link:
-                episode_link = f"{self.base_url}{episode_link}"
+                episode_link = f"{episode_link}"
                 print(f"Found episode-specific subtitle: {episode_link}", flush=True)
                 return self.download_tv_subtitle({'href': episode_link}, media_info, root, file)
             elif season_link:
-                season_link = f"{self.base_url}{season_link}"
+                season_link = f"{season_link}"
                 print(f"Found full season subtitle package: {season_link}", flush=True)
                 return self.download_tv_subtitle({'href': season_link}, media_info, root, file)
             else:
@@ -476,6 +502,7 @@ class SubtitleFinder:
         except Exception as e:
             print(f"Error getting season subtitles: {e}")
             return False
+    
 
     def download_tv_subtitle(self, subtitle_url, media_info, output_folder, file):
         """Download and extract TV subtitle (either episode or full season)"""
@@ -484,9 +511,14 @@ class SubtitleFinder:
             zip_name = os.path.splitext(file)[0] + ".subtitle.zip"
             zip_path = os.path.join(output_folder, zip_name)
 
+            # Get the download URL, ensuring it's properly formatted
+            download_url = subtitle_url["href"]
+            print(f"Download URL: {download_url}", flush=True)
+
+            
             # Download the zip file
-            print("Downloading:", subtitle_url["href"], flush=True)
-            response = requests.get(subtitle_url["href"], stream=True)
+            print(f"Downloading: {download_url}", flush=True)
+            response = requests.get(download_url, stream=True)
             response.raise_for_status()
             with open(zip_path, "wb") as f:
                 f.write(response.content)
@@ -494,13 +526,40 @@ class SubtitleFinder:
 
             # Extract the zip file
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                # Look for our specific episode file first
-                target_episode = f"S{media_info['season']}E{media_info['episode']}"
-                matching_files = [f for f in zip_ref.namelist() 
-                                if target_episode.lower() in f.lower() and f.lower().endswith('.srt')]
+                # Create multiple search patterns for the episode
+                season = media_info['season'].zfill(2)  # Ensure 2 digits
+                episode = media_info['episode'].zfill(2)  # Ensure 2 digits
+
+                # Different episode format patterns to search for
+                episode_patterns = [
+                    f"S{season}E{episode}",       # S01E01
+                    f"S{season}xE{episode}",      # S01xE01
+                    f"S{season}x{episode}",       # S01x01
+                    f"{season}x{episode}",        # 01x01
+                    f"S{season}{episode}",        # S0101
+                    f"Season {season} Episode {episode}",  # Season 01 Episode 01
+                    f"Season{season}Episode{episode}",     # Season01Episode01
+                    f"E{episode}",                # E01
+                    f"Ep{episode}",               # Ep01
+                    f"Ep {episode}",              # Ep 01
+                    f"Episode {episode}",         # Episode 01
+                    f"Episode{episode}"           # Episode01
+                ]
+
+                # Find files matching any of our patterns
+                matching_files = []
+                for filename in zip_ref.namelist():
+                    if filename.lower().endswith('.srt'):
+                        # Check if any pattern matches this filename
+                        if any(pattern.lower() in filename.lower() for pattern in episode_patterns):
+                            matching_files.append(filename)
+                            print(f"Found matching subtitle file: {filename}")
+
                 
                 if matching_files:
                     # Found episode-specific file
+                    # Sort by file size (largest first) if there are multiple matches
+                    matching_files.sort(key=lambda f: zip_ref.getinfo(f).file_size, reverse=True)
                     srt_file = matching_files[0]
                     temp_extract_folder = tempfile.mkdtemp()
                     zip_ref.extract(srt_file, temp_extract_folder)
@@ -520,6 +579,9 @@ class SubtitleFinder:
         except Exception as e:
             print(f"Error downloading TV subtitle: {e}")
             return False
+
+    
+        
 if __name__ == "__main__":
     finder = SubtitleFinder()
     finder.find_missing_subtitles()

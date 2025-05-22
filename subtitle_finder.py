@@ -158,7 +158,16 @@ class SubtitleFinder:
                         if cleaned['type'] == 'tv':
                             print(f"  Season: {cleaned['season']}, Episode: {cleaned['episode']}", flush=True)
                         
-                        if self.search_subtitles(cleaned,root,file):
+                        if cleaned['type'] == 'movie':
+                            if self.search_movie_subtitles(cleaned, root, file):
+                                downloaded += 1
+                            else:
+                                failed += 1
+                        elif cleaned['type'] == 'tv':
+                            if self.search_tv_subtitles(cleaned, root, file):
+                                downloaded += 1
+                            else:
+                                failed += 1
                             downloaded += 1
                         else:
                             failed += 1
@@ -172,10 +181,9 @@ class SubtitleFinder:
         print(f"Files still missing subtitles: {failed}")
         print("="*50 + "\n")
 
-    def search_subtitles(self, media_info, root, file, retry_count=0):
-        """Search for subtitles on subdl.com"""
-        MAX_RETRIES = 4
-        base_query = media_info['title']
+    def search_movie_subtitles(self, media_info, root, file, retry_count=0):
+        """Search for movie subtitles on subdl.com"""
+        base_query = f"{media_info['title']} {media_info.get('year', '')}"
         
         # Clean and format the query for URL
         query = base_query.strip().replace(' ', '%20').lower()
@@ -216,8 +224,8 @@ class SubtitleFinder:
             print(f"Error searching for {media_info['title']}: {e}")
             return False
 
-    def get_subtitle_link(self, media_url, media_info, root, file):
-        """Get subtitle link from a specific media url"""
+    def get_movie_subtitle_link(self, media_url, media_info, root, file):
+        """Get movie subtitle link from a specific media url"""
         try:
             response = self.throttled_get(media_url)
             soup = BeautifulSoup(response.text, 'html.parser')
@@ -266,12 +274,8 @@ class SubtitleFinder:
             print("No subtitle URL found.")
             return False   
 
-    def download_and_extract_subtitle(self, subtitle_url, media_info, output_folder, file):
-        """
-        Downloads a .zip file from the URL and extracts all files.
-        If zip contains exactly one .srt file, saves it with the video filename.
-        If zip contains multiple files, extracts all to a 'temp' subfolder.
-        """
+    def download_movie_subtitle(self, subtitle_url, media_info, output_folder, file):
+        """Download and extract movie subtitle"""
         # Ensure output folder exists
         os.makedirs(output_folder, exist_ok=True)
 
@@ -328,3 +332,126 @@ class SubtitleFinder:
 if __name__ == "__main__":
     finder = SubtitleFinder()
     finder.find_missing_subtitles()
+    def search_tv_subtitles(self, media_info, root, file):
+        """Search for TV show subtitles on subdl.com"""
+        # Search using just the show name (without season/episode)
+        base_query = media_info['title'].replace(f" S{media_info['season']}E{media_info['episode']}", "")
+        query = base_query.strip().replace(' ', '%20').lower()
+        query = quote(query)
+        search_url = f"{self.base_url}/search/{query}"
+        print(f"Searching TV show: {search_url}", flush=True)
+
+        try:
+            response = self.throttled_get(search_url)
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            # Find the TV show match
+            matches_h3 = soup.find("h3", string=lambda text: text and text.strip().startswith("Matches"))
+            if matches_h3:
+                first_a = matches_h3.find_next("a", href=True)
+                if first_a:
+                    show_url = f"{self.base_url}{first_a['href']}"
+                    print(f"Found TV show page: {show_url}", flush=True)
+                    return self.get_tv_season_subtitles(show_url, media_info, root, file)
+            
+            print("No matching TV show found", flush=True)
+            return False
+            
+        except Exception as e:
+            print(f"Error searching for TV show: {e}")
+            return False
+
+    def get_tv_season_subtitles(self, show_url, media_info, root, file):
+        """Get subtitles for a specific TV season"""
+        try:
+            response = self.throttled_get(show_url)
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            # Find the season we need
+            season_str = f"Season {media_info['season']}"
+            season_heading = soup.find("h3", string=lambda text: text and season_str in text)
+            
+            if not season_heading:
+                print(f"No subtitles found for {season_str}", flush=True)
+                return False
+                
+            # Find English section
+            english_section = None
+            for section in season_heading.find_all_next("div", class_="flex flex-col mt-4 select-none"):
+                if section.find("h2") and "English" in section.find("h2").text:
+                    english_section = section
+                    break
+                    
+            if not english_section:
+                print("No English subtitles found for this season", flush=True)
+                return False
+                
+            # Look for episode-specific or full season subtitles
+            episode_str = f"S{media_info['season']}E{media_info['episode']}"
+            episode_link = None
+            season_link = None
+            
+            for link in english_section.find_all("a", href=True):
+                if episode_str in link.text:
+                    episode_link = link
+                    break
+                elif "Season" in link.text:
+                    season_link = link
+                    
+            if episode_link:
+                print(f"Found episode-specific subtitle: {episode_link['href']}", flush=True)
+                return self.download_tv_subtitle(episode_link, media_info, root, file)
+            elif season_link:
+                print(f"Found full season subtitle package: {season_link['href']}", flush=True)
+                return self.download_tv_subtitle(season_link, media_info, root, file)
+            else:
+                print("No matching subtitles found for this episode", flush=True)
+                return False
+                
+        except Exception as e:
+            print(f"Error getting season subtitles: {e}")
+            return False
+
+    def download_tv_subtitle(self, subtitle_url, media_info, output_folder, file):
+        """Download and extract TV subtitle (either episode or full season)"""
+        try:
+            # Create zip file path matching video filename
+            zip_name = os.path.splitext(file)[0] + ".subtitle.zip"
+            zip_path = os.path.join(output_folder, zip_name)
+
+            # Download the zip file
+            print("Downloading:", subtitle_url["href"])
+            response = requests.get(subtitle_url["href"], stream=True)
+            response.raise_for_status()
+            with open(zip_path, "wb") as f:
+                f.write(response.content)
+            print(f"Saved subtitle zip: {zip_path}")
+
+            # Extract the zip file
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                # Look for our specific episode file first
+                target_episode = f"S{media_info['season']}E{media_info['episode']}"
+                matching_files = [f for f in zip_ref.namelist() 
+                                if target_episode.lower() in f.lower() and f.lower().endswith('.srt')]
+                
+                if matching_files:
+                    # Found episode-specific file
+                    srt_file = matching_files[0]
+                    temp_extract_folder = tempfile.mkdtemp()
+                    zip_ref.extract(srt_file, temp_extract_folder)
+                    
+                    original_path = os.path.join(temp_extract_folder, srt_file)
+                    new_path = os.path.join(output_folder, os.path.splitext(file)[0] + ".english.srt")
+                    shutil.move(original_path, new_path)
+                    
+                    print(f"Successfully extracted episode subtitle: {new_path}")
+                    shutil.rmtree(temp_extract_folder)
+                    return True
+                else:
+                    # No episode-specific file, check if this was a full season package
+                    print("No episode-specific subtitle found in package", flush=True)
+                    return False
+                    
+        except Exception as e:
+            print(f"Error downloading TV subtitle: {e}")
+            return False

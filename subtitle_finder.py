@@ -203,6 +203,13 @@ class SubtitleFinder:
                 media_url = f"{self.base_url}{first_a["href"]}" if first_a else None
                 if media_url:
                     print(f"Fetching subtitle list from: {media_url}", flush=True)
+                    
+                    # Check for ad redirect
+                    if "subdl.com/ads" in media_url:
+                        print("Detected ad redirect, retrying with different headers...", flush=True)
+                        self.update_headers()  # Rotate to new user agent
+                        return self.search_subtitles(media_info, root, file)  # Retry search
+                    
                     # Now get subtitles list from the media-specific page
                     return self.get_subtitle_link(media_url, media_info, root, file)    
                 else:

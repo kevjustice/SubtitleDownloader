@@ -28,7 +28,7 @@ python subtitle_finder.py
 ```
 
 ## 📄 License
-This project is licensed under the GPL
+This project is licensed under Beerware [https://en.wikipedia.org/wiki/Beerware](https://en.wikipedia.org/wiki/Beerware)
 
 ## 🙋‍♂️ Contributing
 Pull requests are welcome! For major changes, please open an issue first to discuss.

@@ -434,9 +434,19 @@ class SubtitleFinder:
                     episode_link = href
                     break
 
-            # 3. If not found, look for Season variants
+            # Initialize variables
+            episode_link = None
+            season_link = None
+            
+            # 1. Look for S02E07
+            for text, href in hrefs:
+                search_str = f"S{media_info['season']}E{media_info['episode']}"
+                if search_str in text:
+                    episode_link = href
+                    break
+
+            # 2. If not found, look for Season variants
             if not episode_link:
-                
                 season_number = media_info['season']
                 season_number_no_pad = str(int(season_number))  # Converts "02" to "2"
 

@@ -58,62 +58,73 @@ class SubtitleFinder:
         # Remove file extension
         clean_name = os.path.splitext(filename)[0]
         
-        # Extract year if present (look for years in filename before cleaning)
-        year_match = re.search(r'\b(19|20)\d{2}\b', filename)  # Find 4-digit years
-        year = year_match.group(0) if year_match else None  # Get actual matched text
-        if year:
-            clean_name = re.sub(r'\b(19|20)\d{2}\b', '', clean_name)  # Remove year from name
+        # First check if this is a TV show by looking for S##E## pattern
+        episode_match = re.search(r'(?:^|\b)[Ss](\d{1,3})[Ee](\d{1,3})\b', clean_name)
         
-        
-        # Extract season/episode (for TV shows) - handles S01E01, S1E2, etc formats
-        episode_match = re.search(r'(?:^|\b)[Ss](\d{1,3})[Ee](\d{1,3})\b', filename)
-        season, episode = episode_match.groups() if episode_match else (None, None)
-        
-        if episode:
-            clean_name = re.sub(r'(?:^|\b)[Ss](\d{1,3})[Ee](\d{1,3})\b', '', clean_name)
-        
-        
-        # Remove common unwanted patterns and artifacts (including year markers)
-        clean_name = re.sub(
+        if episode_match:
+            # This is a TV show - split into show title and episode title
+            season, episode = episode_match.groups()
+            parts = re.split(r'[Ss]\d{1,3}[Ee]\d{1,3}', clean_name)
+            show_title = parts[0].strip()
+            episode_title = parts[1] if len(parts) > 1 else ""
+            
+            # Clean show title
+            show_title = self._clean_common_patterns(show_title)
+            
+            # Clean episode title
+            episode_title = self._clean_common_patterns(episode_title)
+            
+            return {
+                'type': 'tv',
+                'show_title': show_title,
+                'episode_title': episode_title,
+                'season': season,
+                'episode': episode,
+                'title': f"{show_title} S{season}E{episode}"  # Full title for display
+            }
+        else:
+            # This is a movie - handle normally
+            year_match = re.search(r'\b(19|20)\d{2}\b', clean_name)
+            year = year_match.group(0) if year_match else None
+            
+            clean_name = self._clean_common_patterns(clean_name)
+            
+            if year:
+                return {
+                    'type': 'movie',
+                    'title': f"{clean_name} {year}",
+                    'year': year
+                }
+            else:
+                return {
+                    'type': 'movie',
+                    'title': clean_name,
+                    'year': None
+                }
+
+    def _clean_common_patterns(self, text):
+        """Helper to clean common patterns from text"""
+        if not text:
+            return ""
+            
+        # Remove common unwanted patterns
+        text = re.sub(
             r'(?:\.|\(|\[|\-)?(\d{3,4}p|WEBRip|BluRay|WEB-DL|WEBDL|HDRip|DVDRip|'
             r'x264|x265|H265|H256|HEVC|AAC5\.1|DTS-HD|Atmos|DDP5|Remux|MeGusta|d3g|'
             r'(?:PPV\.)?[HP]DTV|(?:HD)?CAM|B[LR]\.Rip|WEB|h264|YTS|Copy|10Bit|mkv|avi|mp4|m4v|'
             r'AC3|DTS|DD5\.1|AC3\.5\.1|AC3\.2\.0|AAC|DTS-HD|TrueHD|BluRay\.Rip|'
             r'\d{1,2}\.\d{1,2}|\d{1,2}bit|1080p|2160p)(?:\.|\)|\]|\-)?',
-            '', clean_name, flags=re.IGNORECASE
+            '', text, flags=re.IGNORECASE
         )
         
-        # Remove all content between brackets/parentheses including the brackets
-        clean_name = re.sub(r'[\[\(].*?[\]\)]', '', clean_name)
+        # Remove content in brackets/parentheses
+        text = re.sub(r'[\[\(].*?[\]\)]', '', text)
         
-        # Replace remaining special characters and normalize spaces
-        clean_name = re.sub(r'[^\w\s]', ' ', clean_name)  # Replace non-alphanum with space
-        clean_name = re.sub(r'[\-.]+', ' ', clean_name)    # Replace dashes/dots with space
-        clean_name = re.sub(r'\s+', ' ', clean_name)       # Collapse multiple spaces
-        clean_name = clean_name.strip()
-        
-
-        if episode_match:
-            season, episode = episode_match.groups()
-            return {
-                'type': 'tv',
-                'title': clean_name.strip('. -'),
-                'title': f"{clean_name.strip('. -')} S{season}E{episode}" if episode else clean_name.strip('. -'),
-                'season': season,
-                'episode': episode
-            }
-        else:
-            if year:
-                return {
-                    'type': 'movie',
-                    'title': f"{clean_name.strip('. -')} {year}" if year else clean_name.strip('. -'),
-                    'year': year
-                }
-            else:
-                return {
-                    'type': 'unknown',
-                    'title': clean_name.strip('. -')
-                }
+        # Normalize special characters and spaces
+        text = re.sub(r'[^\w\s]', ' ', text)
+        text = re.sub(r'[\-.]+', ' ', text)
+        text = re.sub(r'\s+', ' ', text)
+        return text.strip()
             
 
     def find_missing_subtitles(self):

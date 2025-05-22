@@ -237,9 +237,9 @@ class SubtitleFinder:
 
     def download_and_extract_subtitle(self, subtitle_url, media_info, output_folder, file):
         """
-        Downloads a .zip file from the URL, extracts the single file inside,
-        renames it to FILE1.srt, and saves it in the output_folder.
-        Deletes the zip file after extraction.
+        Downloads a .zip file from the URL and extracts all files.
+        If zip contains exactly one .srt file, saves it with the video filename.
+        If zip contains multiple files, extracts all to a 'temp' subfolder.
         """
         # Ensure output folder exists
         os.makedirs(output_folder, exist_ok=True)
@@ -258,25 +258,33 @@ class SubtitleFinder:
             # Extract the zip file
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                 zip_contents = zip_ref.namelist()
+                srt_files = [f for f in zip_contents if f.lower().endswith('.srt')]
 
-                if len(zip_contents) != 1:
-                    raise Exception("Expected exactly one file in the zip archive.")
+                if len(srt_files) == 1:
+                    # Single SRT file - extract directly
+                    temp_extract_folder = tempfile.mkdtemp()
+                    zip_ref.extractall(temp_extract_folder)
+                    
+                    original_file_path = os.path.join(temp_extract_folder, srt_files[0])
+                    base_name = os.path.splitext(file)[0] + ".english.srt"
+                    new_file_path = os.path.join(output_folder, base_name)
+                    shutil.move(original_file_path, new_file_path)
+                    
+                    print(f"✓ Successfully downloaded subtitle: {new_file_path}")
+                    shutil.rmtree(temp_extract_folder)
+                else:
+                    # Multiple files - extract to temp subfolder
+                    temp_subfolder = os.path.join(output_folder, "temp")
+                    os.makedirs(temp_subfolder, exist_ok=True)
+                    zip_ref.extractall(temp_subfolder)
+                    
+                    print(f"✓ Extracted {len(zip_contents)} files to: {temp_subfolder}")
+                    print("Contents:")
+                    for f in zip_contents:
+                        print(f" - {f}")
 
-                # Extract to a temporary folder first
-                temp_extract_folder = tempfile.mkdtemp()
-                zip_ref.extractall(temp_extract_folder)
-
-                # Rename and move the file
-                original_file_path = os.path.join(temp_extract_folder, zip_contents[0])
-                base_name = os.path.splitext(file)[0] + ".english.srt"
-                new_file_path = os.path.join(output_folder, base_name)
-                shutil.move(original_file_path, new_file_path)
-
-                print(f"✓ Successfully downloaded subtitle, extracted and saved to: {new_file_path}")
-            
-            # Clean up
+            # Clean up zip file
             os.remove(zip_path)
-            shutil.rmtree(temp_extract_folder)
             return True
         
         except Exception as e:

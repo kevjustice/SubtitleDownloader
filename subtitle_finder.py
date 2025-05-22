@@ -5,6 +5,7 @@ import requests
 import zipfile
 import tempfile
 import shutil
+import json
 from bs4 import BeautifulSoup
 from urllib.parse import quote
 
@@ -24,6 +25,58 @@ class SubtitleFinder:
         self.current_ua = 0
         self.update_headers()
         self.last_request_time = 0
+        
+        # List to track shows that need better names
+        self.shows_to_lookup = set()
+        
+        # Load show name mappings from file
+        self.show_name_mappings = self.load_show_name_mappings()
+
+    def load_show_name_mappings(self):
+        """Load show name mappings from file"""
+        mappings_file = 'show_name_mappings.json'
+        if os.path.exists(mappings_file):
+            try:
+                with open(mappings_file, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except Exception as e:
+                print(f"Error loading show name mappings: {e}")
+                return {}
+        return {}
+
+    def save_show_name_mappings(self):
+        """Save show name mappings to file"""
+        mappings_file = 'show_name_mappings.json'
+        try:
+            with open(mappings_file, 'w', encoding='utf-8') as f:
+                json.dump(self.show_name_mappings, f, indent=2, ensure_ascii=False)
+            print(f"Saved {len(self.show_name_mappings)} show name mappings to {mappings_file}")
+        except Exception as e:
+            print(f"Error saving show name mappings: {e}")
+
+    def get_official_show_name(self, show_title):
+        """Get the official show name from TVmaze API"""
+        try:
+            query = quote(show_title)
+            url = f"https://api.tvmaze.com/search/shows?q={query}"
+            
+            # Use a regular request to avoid throttling our main session
+            response = requests.get(url, timeout=10)
+            results = response.json()
+            
+            if results and len(results) > 0:
+                show = results[0]['show']
+                print(f"TVmaze API: '{show_title}' → '{show['name']}'")
+                return {
+                    'name': show['name'],
+                    'original_name': show.get('original_name', show['name']),
+                    'id': show['id'],
+                    'url': show['url']
+                }
+            return None
+        except Exception as e:
+            print(f"Error getting official show name: {e}")
+            return None
 
     def update_headers(self):
         """Rotate user agent and update session headers"""
@@ -109,16 +162,16 @@ class SubtitleFinder:
             
         # Remove common unwanted patterns
         text = re.sub(
-            r'(?:\.|\(|\[|\-)?(\d{3,4}p|WEBRip|BluRay|WEB-DL|WEBDL|HDRip|DVDRip|'
+            r'(?:\.|\(|$$|\-)?(\d{3,4}p|WEBRip|BluRay|WEB-DL|WEBDL|HDRip|DVDRip|'
             r'x264|x265|H265|H256|HEVC|AAC5\.1|DTS-HD|Atmos|DDP5|Remux|MeGusta|d3g|'
-            r'(?:PPV\.)?[HP]DTV|(?:HD)?CAM|B[LR]\.Rip|WEB|h264|YTS|Copy|10Bit|mkv|avi|mp4|m4v|'
+            r'(?:PPV\.)?[HP]DTV|(?:HD)?CAM|B[LR]\.Rip|WEB|h264|YTS|Copy|10Bit|mkv|mp4|m4v|'
             r'AC3|DTS|DD5\.1|AC3\.5\.1|AC3\.2\.0|AAC|DTS-HD|TrueHD|BluRay\.Rip|'
-            r'\d{1,2}\.\d{1,2}|\d{1,2}bit|1080p|2160p)(?:\.|\)|\]|\-)?',
+            r'\d{1,2}\.\d{1,2}|\d{1,2}bit|1080p|2160p)(?:\.|\)|$$|\-)?',
             '', text, flags=re.IGNORECASE
         )
         
         # Remove content in brackets/parentheses
-        text = re.sub(r'[\[\(].*?[\]\)]', '', text)
+        text = re.sub(r'[$$\(].*?[$$\)]', '', text)
         
         # Normalize special characters and spaces
         text = re.sub(r'[^\w\s]', ' ', text)
@@ -126,7 +179,6 @@ class SubtitleFinder:
         text = re.sub(r'\s+', ' ', text)
         return text.strip()
             
-
     def find_missing_subtitles(self):
         """Find video files missing subtitles"""
         media_path = self.config.get('Settings', 'media_path')
@@ -175,13 +227,37 @@ class SubtitleFinder:
                             else:
                                 failed += 1
                         elif cleaned['type'] == 'tv':
+                            # Check if we have a better name for this show
+                            original_title = cleaned['show_title']
+                            if original_title.lower() in self.show_name_mappings:
+                                better_name = self.show_name_mappings[original_title.lower()]['name']
+                                print(f"  Using mapped show name: '{better_name}' (was: '{original_title}')")
+                                cleaned['show_title'] = better_name
+                                cleaned['title'] = f"{better_name} S{cleaned['season']}E{cleaned['episode']}"
+                            
                             if self.search_tv_subtitles(cleaned, root, file):
                                 downloaded += 1
                             else:
                                 failed += 1
-                            downloaded += 1
                         else:
                             failed += 1
+        
+        # After processing all files, look up any shows that need better names
+        if self.shows_to_lookup:
+            print("\nLooking up official names for TV shows...")
+            for show_title in self.shows_to_lookup:
+                # Skip if we already have this mapping
+                if show_title.lower() in self.show_name_mappings:
+                    continue
+                    
+                # Query TVmaze API
+                show_info = self.get_official_show_name(show_title)
+                if show_info:
+                    self.show_name_mappings[show_title.lower()] = show_info
+                    print(f"Added mapping: '{show_title}' → '{show_info['name']}'")
+            
+            # Save updated mappings
+            self.save_show_name_mappings()
         
         # Print summary
         print("\n" + "="*50)
@@ -351,7 +427,7 @@ class SubtitleFinder:
     def search_tv_subtitles(self, media_info, root, file):
         """Search for TV show subtitles on subdl.com"""
         # Search using just the show name (without season/episode)
-        base_query = media_info['title'].replace(f" S{media_info['season']}E{media_info['episode']}", "")
+        base_query = media_info['show_title']
         query = base_query.strip().replace(' ', '%20').lower()
         query = quote(query)
         search_url = f"{self.base_url}/search/{query}"
@@ -368,9 +444,21 @@ class SubtitleFinder:
                 if first_a:
                     show_url = f"{self.base_url}{first_a['href']}"
                     print(f"Found TV show page: {show_url}", flush=True)
+                    
+                    # Check if this is an ad redirect page
+                    if "subdl.com/ads" in show_url:
+                        print("No subtitles found for this show (ad redirect page detected)", flush=True)
+                        # Add this show to our lookup list
+                        self.shows_to_lookup.add(media_info['show_title'])
+                        print(f"Added '{media_info['show_title']}' to shows that need better names")
+                        return False
+                    
                     return self.get_tv_season_subtitles(show_url, media_info, root, file)
             
             print("No matching TV show found", flush=True)
+            # Add this show to our lookup list
+            self.shows_to_lookup.add(media_info['show_title'])
+            print(f"Added '{media_info['show_title']}' to shows that need better names")
             return False
             
         except Exception as e:
@@ -384,23 +472,17 @@ class SubtitleFinder:
             soup = BeautifulSoup(response.text, 'html.parser')
             
             # Find the season we need
-            
             season_number = int(media_info['season'])  # Converts "02" to 2
             season_str = f"Season {season_number}"
             
             for a_tag in soup.find_all('a', href=True):
                 if season_str.lower() in a_tag.get_text(separator=" ", strip=True).lower():
-                    
                     episode_page = f"{self.base_url}{a_tag['href']}"
                     print(f"Found {season_str}:", episode_page, flush=True)
                     return self.get_tv_episode_subtitles(episode_page, media_info, root, file)
-                    break  # Stop after the first match
-                
             
-            
-            if not episode_page:
-                print(f"No subtitles found for {season_str}", flush=True)
-                return False
+            print(f"No subtitles found for {season_str}", flush=True)
+            return False
                         
         except Exception as e:
             print(f"Error getting season subtitles: {e}", flush=True)
@@ -531,28 +613,32 @@ class SubtitleFinder:
             with open(zip_path, "wb") as f:
                 f.write(response.content)
             print(f"Saved subtitle zip: {zip_path}", flush=True)
+            
+            # Create multiple search patterns for the episode
+            season = media_info['season'].zfill(2)  # Ensure 2 digits
+            episode = media_info['episode'].zfill(2)  # Ensure 2 digits
+
+            # Different episode format patterns to search for
+            episode_patterns = [
+                f"S{season}E{episode}",       # S01E01
+                f"S{season}xE{episode}",      # S01xE01
+                f"S{season}x{episode}",       # S01x01
+                f"{season}x{episode}",        # 01x01
+                f"S{season}{episode}",        # S0101
+                f"Season {season} Episode {episode}",  # Season 01 Episode 01
+                f"Season{season}Episode{episode}",     # Season01Episode01
+                f"E{episode}",                # E01
+                f"Ep{episode}",               # Ep01
+                f"Ep {episode}",              # Ep 01
+                f"Episode {episode}",         # Episode 01
+                f"Episode{episode}"           # Episode01
+            ]
 
             # Extract the zip file
+            temp_extract_folder = tempfile.mkdtemp()
+            success = False
+            
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                # Create multiple search patterns for the episode
-                season = media_info['season'].zfill(2)  # Ensure 2 digits
-                episode = media_info['episode'].zfill(2)  # Ensure 2 digits
-
-                # Different episode format patterns to search for
-                episode_patterns = [
-                    f"S{season}E{episode}",       # S01E01
-                    f"S{season}xE{episode}",      # S01xE01
-                    f"S{season}x{episode}",       # S01x01
-                    f"{season}x{episode}",        # 01x01
-                    f"S{season}{episode}",        # S0101
-                    f"Season {season} Episode {episode}",  # Season 01 Episode 01
-                    f"Season{season}Episode{episode}",     # Season01Episode01
-                    f"E{episode}",                # E01
-                    f"Ep{episode}",               # Ep01
-                    f"Ep {episode}",              # Ep 01
-                    f"Episode {episode}",         # Episode 01
-                    f"Episode{episode}"           # Episode01
-                ]
 
                 # Find files matching any of our patterns
                 matching_files = []
@@ -563,45 +649,50 @@ class SubtitleFinder:
                             matching_files.append(filename)
                             print(f"Found matching subtitle file: {filename}")
 
-                
                 if matching_files:
-                    # Found episode-specific file
                     # Sort by file size (largest first) if there are multiple matches
                     matching_files.sort(key=lambda f: zip_ref.getinfo(f).file_size, reverse=True)
                     srt_file = matching_files[0]
-                    temp_extract_folder = tempfile.mkdtemp()
+                    
+                    # Extract the file to temp folder
                     zip_ref.extract(srt_file, temp_extract_folder)
                     
+                    # Move the file to final destination
                     original_path = os.path.join(temp_extract_folder, srt_file)
                     new_path = os.path.join(output_folder, os.path.splitext(file)[0] + ".english.srt")
                     shutil.move(original_path, new_path)
                     
                     print(f"Successfully extracted episode subtitle: {new_path}", flush=True)
-                    shutil.rmtree(temp_extract_folder)
-                    # Clean up zip file after successful extraction
-                    if os.path.exists(zip_path):
-                        os.remove(zip_path)
-                        print(f"Removed zip file: {zip_path}", flush=True)
-                    return True
+                    success = True
                 else:
-                    # No episode-specific file, check if this was a full season package
                     print("No episode-specific subtitle found in package", flush=True)
-                    # Clean up zip file
-                    if os.path.exists(zip_path):
-                        os.remove(zip_path)
-                        print(f"Removed zip file: {zip_path}", flush=True)
-                    return False
+            
+            # Close the zipfile before trying to remove it
+            # Clean up temp folder
+            try:
+                shutil.rmtree(temp_extract_folder)
+            except Exception as e:
+                print(f"Warning: Could not remove temp folder: {e}")
+                
+            # Now try to remove the zip file
+            try:
+                os.remove(zip_path)
+                print(f"Removed zip file: {zip_path}")
+            except Exception as e:
+                print(f"Warning: Could not remove zip file: {e}")
+                
+            return success
                     
         except Exception as e:
             print(f"Error downloading TV subtitle: {e}")
-            # Clean up zip file if it exists
-            if os.path.exists(zip_path):
-                os.remove(zip_path)
-                print(f"Removed zip file: {zip_path}", flush=True)
+            # Try to clean up even if there was an error
+            try:
+                if 'temp_extract_folder' in locals() and os.path.exists(temp_extract_folder):
+                    shutil.rmtree(temp_extract_folder)
+            except:
+                pass
             return False
 
-    
-        
 if __name__ == "__main__":
     finder = SubtitleFinder()
     finder.find_missing_subtitles()

@@ -375,9 +375,18 @@ class SubtitleFinder:
             response = self.throttled_get(show_url)
             soup = BeautifulSoup(response.text, 'html.parser')
             
-            # Find the season we need
-            season_str = f"Season {media_info['season']}"
-            season_heading = soup.find("h3", string=lambda text: text and season_str in text)
+            # Find the season we need - try both padded and unpadded season numbers
+            season_num = str(int(media_info['season']))  # Remove leading zeros
+            season_strs = [
+                f"Season {season_num}",  # "Season 2"
+                f"Season {media_info['season']}"  # "Season 02"
+            ]
+            
+            season_heading = None
+            for season_str in season_strs:
+                season_heading = soup.find("h3", string=lambda text: text and season_str in text)
+                if season_heading:
+                    break
             
             if not season_heading:
                 print(f"No subtitles found for {season_str}", flush=True)

@@ -432,18 +432,17 @@ class SubtitleFinder:
             season_link = None
             
             # 1. Look for S02E07
+            episode_link = None
+            season_link = None
+            
             for text, href in hrefs:
                 search_str = f"S{media_info['season']}E{media_info['episode']}"
-                if search_str in text:
-                    episode_block = href.find_parent('li')
-                    for a in episode_block.find_all('a', href=True):
-                        if a['href'].endswith('.zip'):
-                            episode_link = a['href']
-                            break
+                if search_str in text and href.endswith('.zip'):
+                    episode_link = href
                     break
 
             # 2. If not found, look for Season variants
-            if not episode_block:
+            if not episode_link:
                 season_number = media_info['season']
                 season_number_no_pad = str(int(season_number))  # Converts "02" to "2"
 
@@ -457,12 +456,8 @@ class SubtitleFinder:
                     f"Season{season_number_no_pad}"
                 ]
                 for text, href in hrefs:
-                    if any(keyword in text for keyword in season_keywords):
-                        season_block = href.find_parent('li')
-                        for a in season_block.find_all('a', href=True):
-                            if a['href'].endswith('.zip'):
-                                season_link = a['href']
-                                break
+                    if any(keyword in text for keyword in season_keywords) and href.endswith('.zip'):
+                        season_link = href
                         break
 
             # Result

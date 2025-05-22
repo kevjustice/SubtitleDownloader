@@ -14,9 +14,44 @@ class SubtitleFinder:
         self.config.read('config.ini')
         self.base_url = "https://subdl.com"
         self.session = requests.Session()
-        self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        })
+        self.user_agents = [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/119.0',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Safari/605.1.15',
+            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        ]
+        self.current_ua = 0
+        self.update_headers()
+        self.last_request_time = 0
+
+    def update_headers(self):
+        """Rotate user agent and update session headers"""
+        headers = {
+            'User-Agent': self.user_agents[self.current_ua],
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Referer': self.base_url,
+            'DNT': '1'
+        }
+        self.session.headers.update(headers)
+        self.current_ua = (self.current_ua + 1) % len(self.user_agents)
+
+    def throttled_get(self, url):
+        """Make request with rate limiting and header rotation"""
+        import time
+        # Add delay between requests (2-5 seconds)
+        elapsed = time.time() - self.last_request_time
+        if elapsed < 3:
+            time.sleep(3 - elapsed)
+        
+        self.update_headers()
+        response = self.session.get(url)
+        self.last_request_time = time.time()
+        
+        # Random delay after request (1-3 seconds)
+        time.sleep(1 + (time.time() % 2))
+        return response
 
     def clean_filename(self, filename):
         """Clean filename to extract title and year/episode info"""
@@ -156,7 +191,7 @@ class SubtitleFinder:
         print(f"Searching subtitles for: {media_info['title']}", flush=True)
         
         try:
-            response = self.session.get(search_url)
+            response = self.throttled_get(search_url)
             soup = BeautifulSoup(response.text, 'html.parser')
             
             # Step 1: Find the <h3> tag containing "Matches"
@@ -182,7 +217,7 @@ class SubtitleFinder:
     def get_subtitle_link(self, media_url, media_info, root, file):
         """Get subtitle link from a specific media url"""
         try:
-            response = self.session.get(media_url)
+            response = self.throttled_get(media_url)
             soup = BeautifulSoup(response.text, 'html.parser')
             zip_link = ""
             # Find each subtitle entry
@@ -202,7 +237,7 @@ class SubtitleFinder:
         if subtitle_url:
             print(f"Fetching subtitle page: {subtitle_url}", flush=True)
             try:
-                response = self.session.get(subtitle_url)
+                response = self.throttled_get(subtitle_url)
                 soup= BeautifulSoup(response.text, 'html.parser')
                 
                 # Find all language sections

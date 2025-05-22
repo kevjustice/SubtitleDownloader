@@ -200,20 +200,10 @@ class SubtitleFinder:
                 if media_url:
                     print(f"Fetching subtitle list from: {media_url}", flush=True)
                     
-                    # Check for ad redirect
+                    # Check for ad redirect (indicates no subtitles available)
                     if "subdl.com/ads" in media_url:
-                        if retry_count >= MAX_RETRIES:
-                            print("Max retries reached for ad redirect, skipping...", flush=True)
-                            return False
-                        
-                        import time
-                        import random
-                        delay = random.uniform(2, 5)  # Random delay between 2-5 seconds
-                        print(f"Detected ad redirect, waiting {delay:.1f} seconds before retry {retry_count + 1}/{MAX_RETRIES}...", flush=True)
-                        time.sleep(delay)
-                        
-                        self.update_headers()  # Rotate to new user agent
-                        return self.search_subtitles(media_info, root, file, retry_count + 1)  # Retry search
+                        print("No subtitles found for this title (ad redirect page detected)", flush=True)
+                        return False
                     
                     # Now get subtitles list from the media-specific page
                     return self.get_subtitle_link(media_url, media_info, root, file)    

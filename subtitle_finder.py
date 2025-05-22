@@ -214,7 +214,7 @@ class SubtitleFinder:
                         return False
                     
                     # Now get subtitles list from the media-specific page
-                    return self.get_subtitle_link(media_url, media_info, root, file)    
+                    return self.get_movie_subtitle_link(media_url, media_info, root, file)    
                 else:
                     print("No media matches found", flush=True)
             else:
@@ -329,9 +329,6 @@ class SubtitleFinder:
             return False
 
 
-if __name__ == "__main__":
-    finder = SubtitleFinder()
-    finder.find_missing_subtitles()
     def search_tv_subtitles(self, media_info, root, file):
         """Search for TV show subtitles on subdl.com"""
         # Search using just the show name (without season/episode)

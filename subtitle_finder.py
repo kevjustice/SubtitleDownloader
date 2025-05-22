@@ -145,7 +145,7 @@ class SubtitleFinder:
                              sub_file.endswith('.english.srt'))):
                             sub_found = True
                             has_subtitles += 1
-                            print(f"✓ Subtitle already exists: {sub_file}", flush=True)
+                            print(f"+ Subtitle already exists: {sub_file}", flush=True)
                             break
                     
                     if not sub_found:
@@ -227,13 +227,7 @@ class SubtitleFinder:
             response = self.throttled_get(media_url)
             soup = BeautifulSoup(response.text, 'html.parser')
             zip_link = ""
-            # Find each subtitle entry
-            #for row in soup.find_all('div', class_='row justify-content-between'):
-            #    # Extract subtitle details
-            #    title_div = row.find('div', class_='col-auto')
-            #    if not title_div:
-            #        continue
-                    
+                   
             title = soup.find('h3').get_text(strip=True)
             subtitle_url = f"{self.base_url}{soup.find('a')['href']}"
             
@@ -322,7 +316,7 @@ class SubtitleFinder:
                     os.makedirs(temp_subfolder, exist_ok=True)
                     zip_ref.extractall(temp_subfolder)
                     
-                    print(f"✓ Extracted {len(zip_contents)} files to: {temp_subfolder}")
+                    print(f"+ Extracted {len(zip_contents)} files to: {temp_subfolder}")
                     print("Contents:")
                     for f in zip_contents:
                         print(f" - {f}")
@@ -330,7 +324,7 @@ class SubtitleFinder:
             return True
         
         except Exception as e:
-            print(f"× Error downloading subtitle: {e}")
+            print(f"x Error downloading subtitle: {e}")
             return False
 
 

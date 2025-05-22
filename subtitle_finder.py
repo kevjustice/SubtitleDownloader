@@ -2,6 +2,9 @@ import os
 import re
 import configparser
 import requests
+import zipfile
+import tempfile
+import shutil
 from bs4 import BeautifulSoup
 from urllib.parse import quote
 
@@ -120,7 +123,7 @@ class SubtitleFinder:
                         if cleaned['type'] == 'tv':
                             print(f"  Season: {cleaned['season']}, Episode: {cleaned['episode']}", flush=True)
                         
-                        if self.search_subtitles(cleaned):
+                        if self.search_subtitles(cleaned,root,file):
                             downloaded += 1
                         else:
                             failed += 1
@@ -134,7 +137,7 @@ class SubtitleFinder:
         print(f"Files still missing subtitles: {failed}")
         print("="*50 + "\n")
 
-    def search_subtitles(self, media_info):
+    def search_subtitles(self, media_info, root,file):
         """Search for subtitles on subdl.com"""
         # Build search query with appropriate metadata
         #if media_info['type'] == 'movie':
@@ -156,116 +159,132 @@ class SubtitleFinder:
             response = self.session.get(search_url)
             soup = BeautifulSoup(response.text, 'html.parser')
             
-            # Find best media match from search results
-            media_matches = soup.find_all('div', class_='row justify-content-between')
-            if not media_matches:
+            # Step 1: Find the <h3> tag containing "Matches"
+            matches_h3 = soup.find("h3", string=lambda text: text and text.strip().startswith("Matches"))
+
+            # Step 2: Find the first <a> tag after this <h3>
+            if matches_h3:
+                first_a  = matches_h3.find_next("a", href=True)
+                media_url = f"{self.base_url}{first_a["href"]}" if first_a else None
+                if media_url:
+                    print(f"Fetching subtitle list from: {media_url}", flush=True)
+                    # Now get subtitles list from the media-specific page
+                    return self.get_subtitle_link(media_url, media_info, root, file)    
+                else:
+                    print("No media matches found", flush=True)
+            else:
                 print("No media matches found", flush=True)
-                return False
-
-            # Get first media result details
-            first_match = media_matches[0]
-            title_link = first_match.find('h3').find('a')
-            media_title = title_link.get_text(strip=True)
-            media_url = f"{self.base_url}{title_link['href']}"
-            
-            print(f"Found media page: {media_title}", flush=True)
-            print(f"Fetching subtitle list from: {media_url}", flush=True)
-            
-            # Now get subtitles list from the media-specific page
-            return self.get_subtitle_list(media_url, media_info)
-
-            # The subtitle list handling was moved to get_subtitle_list()
-                
+                return False               
         except Exception as e:
             print(f"Error searching for {media_info['title']}: {e}")
             return False
 
-    def get_subtitle_list(self, media_url, media_info):
-        """Get subtitles list from a specific media page"""
+    def get_subtitle_link(self, media_url, media_info, root, file):
+        """Get subtitle link from a specific media url"""
         try:
             response = self.session.get(media_url)
             soup = BeautifulSoup(response.text, 'html.parser')
-            
-            subtitles = []
+            zip_link = ""
             # Find each subtitle entry
-            for row in soup.find_all('div', class_='row justify-content-between'):
-                # Extract subtitle details
-                title_div = row.find('div', class_='col-auto')
-                if not title_div:
-                    continue
+            #for row in soup.find_all('div', class_='row justify-content-between'):
+            #    # Extract subtitle details
+            #    title_div = row.find('div', class_='col-auto')
+            #    if not title_div:
+            #        continue
                     
-                title = title_div.find('h3').get_text(strip=True)
-                subtitle_url = f"{self.base_url}{title_div.find('a')['href']}"
-                
-                # Check for English language
-                if not row.find('img', alt='English'):
-                    continue
-                
-                # Extract release info
-                release_span = row.find('div', class_='text-truncate').find('span', class_='release')
-                release = release_span.get_text(strip=True) if release_span else ''
-                
-                # Extract downloads count
-                count_text = row.find('div', class_='col-auto').get_text(strip=True)
-                downloads = int(re.search(r'\d+', count_text).group()) if re.search(r'\d+', count_text) else 0
-                
-                subtitles.append({
-                    'title': title,
-                    'url': subtitle_url,
-                    'release': release,
-                    'downloads': downloads
-                })
-
-            if not subtitles:
-                print("No English subtitles found for this media", flush=True)
-                return False
-
-            # Sort by best match (download count + release type match)
-            subtitles.sort(key=lambda x: (
-                -x['downloads'],
-                x['release'].lower() in media_info.get('title', '').lower()
-            ), reverse=True)
-
-            print(f"Found {len(subtitles)} English subtitle(s)", flush=True)
-            print(f"Best match: {subtitles[0]['title']} (Downloads: {subtitles[0]['downloads']})", flush=True)
-            return self.download_subtitle(subtitles[0]['url'], media_info)
+            title = soup.find('h3').get_text(strip=True)
+            subtitle_url = f"{self.base_url}{soup.find('a')['href']}"
             
         except Exception as e:
             print(f"Error getting subtitle list: {e}")
             return False
+        
+        if subtitle_url:
+            print(f"Fetching subtitle page: {subtitle_url}", flush=True)
+            try:
+                response = self.session.get(subtitle_url)
+                soup= BeautifulSoup(response.text, 'html.parser')
+                
+                # Find all language sections
+                sections = soup.find_all("div", class_="flex flex-col mt-4 select-none")
 
-    def download_subtitle(self, subtitle_url, media_info):
-        """Download the subtitle file"""
+                # Loop through each section to find the one containing "English"
+                for section in sections:
+                    header = section.find("h2")
+                    if header and "English" in header.text:
+                        print("Found English section")
+                        # Found the English section
+                        # Now find first link inside it that ends with ".zip"
+                        zip_link = section.find("a", href=True, string=None)
+                        if not zip_link:
+                            zip_link = section.find("a", href=True)
+                        while zip_link and ".zip" not in zip_link["href"]:
+                            zip_link = zip_link.find_next("a", href=True)
+                        
+                        if zip_link:
+                            print("First English subtitle download link:", zip_link["href"])
+                            return self.download_and_extract_subtitle(zip_link, media_info, root, file)
+                        else:
+                            print("No download link found in English section.")
+                        break
+                    
+            except Exception as e:
+                print(f"Error finding subtitle page for {media_info['title']}: {e}")
+                return False        
+        else:
+            print("No subtitle URL found.")
+            return False   
+
+    def download_and_extract_subtitle(self, subtitle_url, media_info, output_folder, file):
+        """
+        Downloads a .zip file from the URL, extracts the single file inside,
+        renames it to FILE1.srt, and saves it in the output_folder.
+        Deletes the zip file after extraction.
+        """
+        # Ensure output folder exists
+        os.makedirs(output_folder, exist_ok=True)
+
+        # Create a temporary zip file path
+        zip_path = os.path.join(tempfile.gettempdir(), "subtitle.zip")
+
         try:
-            response = self.session.get(subtitle_url)
-            soup = BeautifulSoup(response.text, 'html.parser')
-            
-            # Find download link in the download button
-            download_form = soup.find('form', {'action': lambda x: x and '/download/' in x})
-            if not download_form:
-                return False
-                
-            download_url = f"{self.base_url}{download_form['action']}"
-            response = self.session.get(download_url)
-            
-            # Save subtitle file
-            filename = f"{media_info['title']}"
-            if media_info['type'] == 'tv':
-                filename += f"_S{media_info['season']}E{media_info['episode']}"
-            else:
-                if media_info.get('year'):
-                    filename += f"_{media_info['year']}"
-            filename += ".english.srt"
-                
-            with open(filename, 'wb') as f:
+            # Download the zip file
+            print("Downloading:", subtitle_url["href"])
+            response = requests.get(subtitle_url["href"], stream=True)
+            response.raise_for_status()  # Raise error if download fails
+            with open(zip_path, "wb") as f:
                 f.write(response.content)
-            print(f"✓ Successfully downloaded subtitle: {filename}", flush=True)
-            return True
+
+            # Extract the zip file
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                zip_contents = zip_ref.namelist()
+
+                if len(zip_contents) != 1:
+                    raise Exception("Expected exactly one file in the zip archive.")
+
+                # Extract to a temporary folder first
+                temp_extract_folder = tempfile.mkdtemp()
+                zip_ref.extractall(temp_extract_folder)
+
+                # Rename and move the file
+                original_file_path = os.path.join(temp_extract_folder, zip_contents[0])
+                base_name = os.path.splitext(file)[0] + ".english.srt"
+                new_file_path = os.path.join(output_folder, base_name)
+                shutil.move(original_file_path, new_file_path)
+
+                print(f"✓ Successfully downloaded subtitle, extracted and saved to: {new_file_path}")
             
-                
+            # Clean up
+            os.remove(zip_path)
+            shutil.rmtree(temp_extract_folder)
+            return True
+        
         except Exception as e:
             print(f"× Error downloading subtitle: {e}")
+            if os.path.exists(zip_path):
+                os.remove(zip_path)
             return False
+
 
 if __name__ == "__main__":
     finder = SubtitleFinder()

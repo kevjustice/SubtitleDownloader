@@ -427,13 +427,6 @@ class SubtitleFinder:
             # Step 3: Apply your matching logic
             download_link = None
 
-            # 1. Look for S02E07
-            for text, href in hrefs:
-                search_str = f"S{media_info['season']}E{media_info['episode']}"
-                if search_str in text:
-                    episode_link = href
-                    break
-
             # Initialize variables
             episode_link = None
             season_link = None
@@ -442,11 +435,15 @@ class SubtitleFinder:
             for text, href in hrefs:
                 search_str = f"S{media_info['season']}E{media_info['episode']}"
                 if search_str in text:
-                    episode_link = href
+                    episode_block = href.find_parent('li')
+                    for a in episode_block.find_all('a', href=True):
+                        if a['href'].endswith('.zip'):
+                            episode_link = a['href']
+                            break
                     break
 
             # 2. If not found, look for Season variants
-            if not episode_link:
+            if not episode_block:
                 season_number = media_info['season']
                 season_number_no_pad = str(int(season_number))  # Converts "02" to "2"
 
@@ -461,14 +458,20 @@ class SubtitleFinder:
                 ]
                 for text, href in hrefs:
                     if any(keyword in text for keyword in season_keywords):
-                        season_link = href
+                        season_block = href.find_parent('li')
+                        for a in season_block.find_all('a', href=True):
+                            if a['href'].endswith('.zip'):
+                                season_link = a['href']
+                                break
                         break
 
             # Result
             if episode_link:
+                episode_link = f"{self.base_url}{episode_link}"
                 print(f"Found episode-specific subtitle: {episode_link}", flush=True)
                 return self.download_tv_subtitle({'href': episode_link}, media_info, root, file)
             elif season_link:
+                season_link = f"{self.base_url}{season_link}"
                 print(f"Found full season subtitle package: {season_link}", flush=True)
                 return self.download_tv_subtitle({'href': season_link}, media_info, root, file)
             else:

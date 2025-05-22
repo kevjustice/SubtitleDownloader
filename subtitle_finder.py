@@ -383,7 +383,7 @@ class SubtitleFinder:
             for a_tag in soup.find_all('a', href=True):
                 if season_str.lower() in a_tag.get_text(separator=" ", strip=True).lower():
                     
-                    episode_page = f"{self.base_url}" + {a_tag['href']}
+                    episode_page = f"{self.base_url}{a_tag['href']}"
                     print(f"Found {season_str}:", episode_page, flush=True)
                     return self.get_tv_episode_subtitles(episode_page, media_info, root, file)
                     break  # Stop after the first match

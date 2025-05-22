@@ -333,10 +333,18 @@ class SubtitleFinder:
                 else:
                     print("No .srt files found in the zip archive", flush=True)
 
+            # Clean up zip file after successful extraction
+            if os.path.exists(zip_path):
+                os.remove(zip_path)
+                print(f"Removed zip file: {zip_path}", flush=True)
             return True
         
         except Exception as e:
             print(f"Error downloading subtitle: {e}", flush=True)
+            # Clean up zip file if it exists
+            if os.path.exists(zip_path):
+                os.remove(zip_path)
+                print(f"Removed zip file: {zip_path}", flush=True)
             return False
 
 
@@ -570,14 +578,26 @@ class SubtitleFinder:
                     
                     print(f"Successfully extracted episode subtitle: {new_path}", flush=True)
                     shutil.rmtree(temp_extract_folder)
+                    # Clean up zip file after successful extraction
+                    if os.path.exists(zip_path):
+                        os.remove(zip_path)
+                        print(f"Removed zip file: {zip_path}", flush=True)
                     return True
                 else:
                     # No episode-specific file, check if this was a full season package
                     print("No episode-specific subtitle found in package", flush=True)
+                    # Clean up zip file
+                    if os.path.exists(zip_path):
+                        os.remove(zip_path)
+                        print(f"Removed zip file: {zip_path}", flush=True)
                     return False
                     
         except Exception as e:
             print(f"Error downloading TV subtitle: {e}")
+            # Clean up zip file if it exists
+            if os.path.exists(zip_path):
+                os.remove(zip_path)
+                print(f"Removed zip file: {zip_path}", flush=True)
             return False
 
     
